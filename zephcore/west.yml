@@ -2,12 +2,31 @@ manifest:
   remotes:
     - name: zephyrproject-rtos
       url-base: https://github.com/zephyrproject-rtos
+    - name: bertouttier
+      url-base: git@github.com:bertouttier
+    - name: fri3dcamp
+      url-base: https://github.com/Fri3dCamp
 
   projects:
     - name: zephyr
       remote: zephyrproject-rtos
       revision: 54b1e23b9ce303480ccbcab4b80d6f2f8442dac1
       import: true
+
+    # Fri3d Camp badges: board definitions (fri3d_badge@2024/@2026) and their
+    # drivers (the 2026 badge's CH32X035 coprocessor holds the LoRa reset and
+    # the 3V3_AUX rail). A Zephyr module; its own west.yml is not imported.
+    - name: fri3d-badge
+      remote: bertouttier
+      repo-path: fri3d-badge-2024-zephyr
+      revision: master
+      path: modules/fri3d/badge
+      import: false
+    # The 2026 badge's coprocessor: its Zephyr drivers (zephyr/), used by the board
+    - name: badge_2026_fw
+      remote: fri3dcamp
+      revision: main
+      path: modules/fri3d/badge_2026_fw
 
   self:
     path: zephcore

@@ -1,0 +1,13 @@
+# ZephCore board manifest — schema in zephcore/scripts/board_manifest.py
+#
+# Fri3d Camp 2026 badge. The board definition (fri3d_badge, revision 2026) and its
+# drivers (the CH32X035 coprocessor that holds the LoRa reset and the 3V3_AUX rail)
+# come from the badge repository, west project fri3d-badge (zephcore/west.yml).
+target: fri3d_badge@2026/esp32s3/procpu
+capabilities:
+  wifi: true
+release:
+  roles: [companion, repeater]
+catalog:
+  device: "Fri3d Badge 2026"
+  maker: fri3d

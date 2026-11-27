@@ -1,0 +1,20 @@
+/*
+ * Flash partition layout — SHARED by the app image and MCUboot.
+ *
+ * The badge's 16 MB layout (partitions_0x0_amp_16M.dtsi): MCUboot at 0x0,
+ * image-0 at 0x20000, storage_partition (BLE bonds, NVS) at 0xfb0000.
+ * ZephCore runs no APP CPU image: its second slot becomes LittleFS.
+ */
+
+/delete-node/ &slot1_appcpu_partition;
+
+&flash0 {
+	partitions {
+		/* LittleFS 1984KB for DataStore (identity, prefs, contacts, channels) */
+		lfs_partition: partition@db0000 {
+			compatible = "zephyr,mapped-partition";
+			label = "lfs";
+			reg = <0xdb0000 DT_SIZE_K(1984)>;
+		};
+	};
+};

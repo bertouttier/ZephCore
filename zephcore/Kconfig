@@ -1414,8 +1414,8 @@ config ZEPHCORE_EASTER_EGG_DOOM
 
 config ZEPHCORE_UI_JOYSTICK
 	bool
-	# In-tree Zephyr board (no board Kconfig of ours to select from)
-	default y if BOARD_WIO_TRACKER_L1
+	# Boards defined outside ZephCore (no board Kconfig of ours to select from)
+	default y if BOARD_WIO_TRACKER_L1 || BOARD_FRI3D_BADGE
 	help
 	  Set by board-level Kconfig when the hardware has a 5-way joystick or
 	  D-pad. Not user-selectable; set by the board configuration.

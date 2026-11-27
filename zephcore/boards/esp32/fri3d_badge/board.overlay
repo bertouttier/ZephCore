@@ -1,0 +1,124 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Fri3d Camp 2026 badge — ZephCore overlay
+ *
+ * The board definition (fri3d_badge@2026, badge repository) already has the
+ * SX1262 as lora0 (with its reset on the coprocessor's GPIO controller and its
+ * power domain on 3V3_AUX), the START button as sw0, the display, touch and
+ * the coprocessor. This overlay adds the ZephCore specifics.
+ */
+
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+
+/ {
+	chosen {
+		/* CFB draws 1 bpp: the mono-tft wrapper converts rows to RGB565 */
+		zephyr,display = &mono_tft;
+		/* the colour pages write RGB565 straight to the panel */
+		zephcore,color-tft = &st7789v;
+	};
+
+	/* Monochrome wrapper around the 2" ST7789V (320x240 landscape) */
+	mono_tft: mono-tft {
+		compatible = "zephcore,mono-tft";
+		tft-dev = <&st7789v>;
+		width = <320>;
+		height = <240>;
+	};
+
+	aliases {
+		/* heartbeat: the debug LED on the back, on the coprocessor (LED API) */
+		led0 = &debug_led;
+		/* unread messages and radio activity: WS2812s on the front */
+		led1 = &unread_led;
+		lora-tx-led = &radio_led;
+	};
+
+	/* Two of the five WS2812s as LEDs of the LED API (driver in the badge module) */
+	status-leds {
+		compatible = "fri3d,led-strip-leds";
+		led-strip = <&badge_leds>;
+
+		unread_led: led_0 {
+			pixel = <0>;
+			color-rgb = <0 0 64>;
+			label = "Unread messages";
+		};
+
+		radio_led: led_1 {
+			pixel = <4>;
+			color-rgb = <64 0 0>;
+			label = "LoRa activity";
+		};
+	};
+
+	/* Input filter: START long press (1000 ms) */
+	user_btn_longpress {
+		compatible = "zephyr,input-longpress";
+		input = <&gamepad>;
+		input-codes = <INPUT_KEY_0>;
+		short-codes = <INPUT_KEY_A>;
+		long-codes = <INPUT_KEY_POWER>;
+		long-delay-ms = <1000>;
+	};
+
+	/* Input filter: START multi-tap
+	 * 1 tap  (400ms wait) -> KEY_1 = back
+	 * 2 taps (400ms wait) -> KEY_B = LED heartbeat toggle
+	 * 3 taps (400ms wait) -> KEY_D = buzzer mute toggle
+	 * 4 taps (400ms wait) -> KEY_C = GPS on/off
+	 * 5 taps (immediate)  -> KEY_E = flood advert */
+	user_btn_multitap {
+		compatible = "zephcore,input-multi-tap";
+		/* No 'input' phandle: KEY_A comes from the longpress pseudo-device */
+		input-codes = <INPUT_KEY_A>;
+		tap-codes = <INPUT_KEY_1 INPUT_KEY_B INPUT_KEY_D INPUT_KEY_C INPUT_KEY_E>;
+		tap-delay-ms = <400>;
+	};
+
+	zephyr,user {
+		/*
+		 * The badge's zephyr,user ADC channel is the headset microphone
+		 * (IO1), not a battery divider: the battery is measured by the
+		 * coprocessor (fuel-gauge0).
+		 */
+		/delete-property/ io-channels;
+	};
+};
+
+/*
+ * Keys for the joystick UI: START is the user button, A selects (the joystick
+ * has no centre press), B goes back, X/Y page. The joystick directions keep
+ * the board's INPUT_KEY_UP/DOWN/LEFT/RIGHT.
+ */
+&buttonstart {
+	zephyr,code = <INPUT_KEY_0>;
+};
+
+&expander_keys {
+	button_a {
+		zephyr,code = <INPUT_KEY_ENTER>;
+	};
+
+	button_b {
+		zephyr,code = <INPUT_KEY_BACK>;
+	};
+
+	button_x {
+		zephyr,code = <INPUT_KEY_PAGEUP>;
+	};
+
+	button_y {
+		zephyr,code = <INPUT_KEY_PAGEDOWN>;
+	};
+};
+
+/* Buzzer (IO38, LEDC): ZephCore looks for the "buzzer" and "pwm0" labels */
+buzzer: &pwm_led_buzzer {
+};
+
+pwm0: &ledc0 {
+};
+
+/* LittleFS auto-mount — standard /lfs mount point */
+#include "../../common/filesystem.dtsi"
