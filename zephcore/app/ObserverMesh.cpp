@@ -542,6 +542,10 @@ bool ObserverMesh::handleCLI(const char *command, char *reply, int reply_size)
 			_creds->mqtt_iata[sizeof(_creds->mqtt_iata) - 1] = '\0';
 			observer_creds_save(_creds, _store->getBasePath());
 			buildTopics();  /* rebuild topic strings with new IATA */
+			/* the publisher keeps its own copies (and the LWT topic): hand
+			 * it the new ones before it reconnects, or it goes on under the
+			 * old IATA until a reboot */
+			mqtt_publisher_set_topics(_status_topic, _packets_topic);
 			snprintf(reply, reply_size, "mqtt.iata=%s (topics updated, reconnecting)", _creds->mqtt_iata);
 			mqtt_publisher_reconnect();
 

@@ -471,6 +471,14 @@ static void mqtt_thread_fn(void *p1, void *p2, void *p3)
 
 /* ========== Public API ========== */
 
+void mqtt_publisher_set_topics(const char *status_topic, const char *packets_topic)
+{
+	strncpy(s_status_topic,  status_topic,  sizeof(s_status_topic) - 1);
+	strncpy(s_packets_topic, packets_topic, sizeof(s_packets_topic) - 1);
+	s_status_topic[sizeof(s_status_topic) - 1]   = '\0';
+	s_packets_topic[sizeof(s_packets_topic) - 1] = '\0';
+}
+
 void mqtt_publisher_start(const struct ObserverCreds *creds,
 			  const char *client_id,
 			  const char *status_topic,
@@ -478,11 +486,8 @@ void mqtt_publisher_start(const struct ObserverCreds *creds,
 {
 	s_creds = creds;
 	strncpy(s_client_id,     client_id,     sizeof(s_client_id) - 1);
-	strncpy(s_status_topic,  status_topic,  sizeof(s_status_topic) - 1);
-	strncpy(s_packets_topic, packets_topic, sizeof(s_packets_topic) - 1);
 	s_client_id[sizeof(s_client_id) - 1]         = '\0';
-	s_status_topic[sizeof(s_status_topic) - 1]   = '\0';
-	s_packets_topic[sizeof(s_packets_topic) - 1] = '\0';
+	mqtt_publisher_set_topics(status_topic, packets_topic);
 
 	/* Thread is already created by K_THREAD_DEFINE — nothing more to do. */
 	LOG_INF("MQTT publisher ready (client_id=%s)", s_client_id);

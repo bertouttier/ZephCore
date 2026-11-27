@@ -40,6 +40,13 @@ void mqtt_publisher_start(const struct ObserverCreds *creds,
 			  const char *status_topic,
 			  const char *packets_topic);
 
+/**
+ * Replace the status and packets topics (e.g. after a new IATA code). Takes
+ * effect on the next publish; call mqtt_publisher_reconnect() afterwards so
+ * the broker also gets the new LWT topic.
+ */
+void mqtt_publisher_set_topics(const char *status_topic, const char *packets_topic);
+
 /*
  * Zero-copy publish staging (single producer — the mesh main thread ONLY).
  * mqtt_publisher_stage() returns the staging payload buffer (capacity in
