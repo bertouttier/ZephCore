@@ -137,8 +137,14 @@ static const struct device *vbat_enable_dev = NULL;
 
 /* Battery fuel gauge (AXP2101 PMU etc.) — preferred over the ADC divider when
  * present. Reports battery voltage and state-of-charge over I2C, so boards with
- * a PMU and no battery ADC (e.g. LilyGo T-Beam) still get battery telemetry. */
-#if DT_HAS_COMPAT_STATUS_OKAY(x_powers_axp2101_fuel_gauge)
+ * a PMU and no battery ADC (e.g. LilyGo T-Beam) still get battery telemetry.
+ * A board's fuel-gauge0 alias names its gauge (any fuel-gauge driver, e.g. a
+ * zephyr,fuel-gauge-composite over a battery sensor); without it an AXP2101. */
+#if DT_HAS_ALIAS(fuel_gauge0)
+#include <zephyr/drivers/fuel_gauge.h>
+#define HAS_FUEL_GAUGE 1
+static const struct device *const fuel_gauge_dev = DEVICE_DT_GET(DT_ALIAS(fuel_gauge0));
+#elif DT_HAS_COMPAT_STATUS_OKAY(x_powers_axp2101_fuel_gauge)
 #include <zephyr/drivers/fuel_gauge.h>
 #define HAS_FUEL_GAUGE 1
 static const struct device *const fuel_gauge_dev =
