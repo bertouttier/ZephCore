@@ -1,4 +1,8 @@
 manifest:
+  # Off by default: "west config manifest.group-filter +fri3d-coprocessor-update"
+  # and "west update" fetch it (boards/esp32/fri3d_badge/coprocessor_update.conf)
+  group-filter: [-fri3d-coprocessor-update]
+
   remotes:
     - name: zephyrproject-rtos
       url-base: https://github.com/zephyrproject-rtos
@@ -27,6 +31,14 @@ manifest:
       remote: fri3dcamp
       revision: main
       path: modules/fri3d/badge_2026_fw
+    # Programs the coprocessor over RVSWD: only for the optional firmware update
+    # at boot (boards/esp32/fri3d_badge/coprocessor_update.conf)
+    - name: zephyr-rvswd
+      remote: bertouttier
+      revision: main
+      path: modules/lib/rvswd
+      groups:
+        - fri3d-coprocessor-update
 
   self:
     path: zephcore
