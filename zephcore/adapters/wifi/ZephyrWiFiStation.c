@@ -83,19 +83,54 @@ static K_WORK_DELAYABLE_DEFINE(connect_work, connect_work_fn);
 static struct net_mgmt_event_callback wifi_cb;
 static struct net_mgmt_event_callback ipv4_cb;
 
-static void do_sntp_and_signal(void)
-{
 #if IS_ENABLED(CONFIG_SNTP)
+/* SNTP after a failure (the first DNS query right after joining a network is
+ * sometimes lost): again after 30 s, doubling up to 30 min, until it works;
+ * after a success every 6 h against the RTC's drift. In the system work
+ * queue: sntp_simple() blocks it for up to 8 s, only on these rare runs. */
+#define SNTP_RETRY_FIRST_S  30
+#define SNTP_RETRY_MAX_S    1800
+#define SNTP_RESYNC_S       (6 * 3600)
+
+static void sntp_work_fn(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(sntp_work, sntp_work_fn);
+static uint32_t s_sntp_retry_s = SNTP_RETRY_FIRST_S;
+
+/* One SNTP query; schedules the next one either way */
+static void sntp_sync(void)
+{
 	struct sntp_time ts;
 	int rc = sntp_simple("pool.ntp.org", 8000, &ts);
+
 	if (rc == 0) {
 		LOG_INF("SNTP synced: %llu", (unsigned long long)ts.seconds);
 		if (s_time_sync_cb) {
 			s_time_sync_cb((uint32_t)ts.seconds);
 		}
+		s_sntp_retry_s = SNTP_RETRY_FIRST_S;
+		k_work_reschedule(&sntp_work, K_SECONDS(SNTP_RESYNC_S));
 	} else {
-		LOG_WRN("SNTP failed (rc=%d) — continuing without time sync", rc);
+		LOG_WRN("SNTP failed (rc=%d), again in %u s", rc, s_sntp_retry_s);
+		k_work_reschedule(&sntp_work, K_SECONDS(s_sntp_retry_s));
+		s_sntp_retry_s = MIN(s_sntp_retry_s * 2, SNTP_RETRY_MAX_S);
 	}
+}
+
+static void sntp_work_fn(struct k_work *work)
+{
+	ARG_UNUSED(work);
+	/* Link down: the next DHCP bind starts over */
+	if (s_wifi_ready) {
+		sntp_sync();
+	}
+}
+#endif
+
+static void do_sntp_and_signal(void)
+{
+#if IS_ENABLED(CONFIG_SNTP)
+	s_sntp_retry_s = SNTP_RETRY_FIRST_S;
+	sntp_sync();
 #endif
 
 	s_wifi_ready = true;
