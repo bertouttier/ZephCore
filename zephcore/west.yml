@@ -1,7 +1,7 @@
 manifest:
-  # Off by default: "west config manifest.group-filter +fri3d-coprocessor-update"
-  # and "west update" fetch it (boards/esp32/fri3d_badge/coprocessor_update.conf)
-  group-filter: [-fri3d-coprocessor-update]
+  # Off by default: "west config manifest.group-filter +<group>" and "west update"
+  # fetch them (boards/esp32/fri3d_badge/coprocessor_update.conf, communicator.conf)
+  group-filter: [-fri3d-coprocessor-update, -fri3d-communicator]
 
   remotes:
     - name: zephyrproject-rtos
@@ -31,6 +31,14 @@ manifest:
       remote: fri3dcamp
       revision: main
       path: modules/fri3d/badge_2026_fw
+    # The Communicator 2026 add-on: only for its keyboard in the joystick UI
+    # (boards/esp32/fri3d_badge/communicator.conf)
+    - name: communicator_2026
+      remote: fri3dcamp
+      revision: main
+      path: modules/fri3d/communicator_2026
+      groups:
+        - fri3d-communicator
     # Programs the coprocessor over RVSWD: only for the optional firmware update
     # at boot (boards/esp32/fri3d_badge/coprocessor_update.conf)
     - name: zephyr-rvswd

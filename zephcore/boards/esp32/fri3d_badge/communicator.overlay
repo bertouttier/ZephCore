@@ -1,0 +1,98 @@
+/*
+ * SPDX-License-Identifier: MIT
+ * Fri3d Camp 2026 badge — optional: the communicator add-on's keyboard
+ *
+ * Paired with communicator.conf (see there). The Communicator 2026 add-on
+ * (Fri3dCamp/communicator_2026, firmware v1.1.0 or later) on the expansion
+ * connector, its keyboard as input events.
+ */
+
+#include <zephyr/dt-bindings/input/input-event-codes.h>
+#include <zephyr/dt-bindings/input/keymap.h>
+#include <fri3d/communicator.dtsi>
+
+#include "communicator_keys.h"
+
+/*
+ * The typing keys report FRI3D_TEXT_KEY(<character>), see
+ * communicator_keys.h; board_init.c makes typed characters of them. The
+ * arrows, Enter, Esc and Backspace keep their codes and drive the UI like the
+ * joystick, A and B; F3 goes to the home screen.
+ */
+#define T(c) FRI3D_TEXT_KEY(c)
+
+&communicator_input {
+	keymap = <MATRIX_KEY(0, 0, INPUT_KEY_ESC)
+		  MATRIX_KEY(0, 1, INPUT_KEY_F1)
+		  MATRIX_KEY(0, 2, FRI3D_KEY_UNUSED) /* F2: the UI's long Enter */
+		  MATRIX_KEY(0, 3, INPUT_KEY_HOME)   /* F3 */
+		  MATRIX_KEY(0, 4, INPUT_KEY_F4)
+		  MATRIX_KEY(0, 5, INPUT_KEY_F5)
+		  MATRIX_KEY(0, 6, INPUT_KEY_F6)
+		  MATRIX_KEY(0, 7, INPUT_KEY_BACKSPACE)
+		  MATRIX_KEY(0, 8, T('`'))
+		  MATRIX_KEY(1, 0, T('1'))
+		  MATRIX_KEY(1, 1, T('2'))
+		  MATRIX_KEY(1, 2, T('3'))
+		  MATRIX_KEY(1, 3, T('4'))
+		  MATRIX_KEY(1, 4, T('5'))
+		  MATRIX_KEY(1, 5, T('6'))
+		  MATRIX_KEY(1, 6, T('7'))
+		  MATRIX_KEY(1, 7, T('8'))
+		  MATRIX_KEY(1, 8, T('9'))
+		  MATRIX_KEY(2, 0, T('0'))
+		  MATRIX_KEY(2, 1, T('-'))
+		  MATRIX_KEY(2, 2, T('='))
+		  MATRIX_KEY(2, 3, INPUT_KEY_TAB)
+		  MATRIX_KEY(2, 4, T('q'))
+		  MATRIX_KEY(2, 5, T('w'))
+		  MATRIX_KEY(2, 6, T('e'))
+		  MATRIX_KEY(2, 7, T('r'))
+		  MATRIX_KEY(2, 8, T('t'))
+		  MATRIX_KEY(3, 0, T('y'))
+		  MATRIX_KEY(3, 1, T('u'))
+		  MATRIX_KEY(3, 2, T('i'))
+		  MATRIX_KEY(3, 3, T('o'))
+		  MATRIX_KEY(3, 4, T('p'))
+		  MATRIX_KEY(3, 5, T('['))
+		  MATRIX_KEY(3, 6, T(']'))
+		  MATRIX_KEY(3, 7, INPUT_KEY_CAPSLOCK)
+		  MATRIX_KEY(3, 8, T('a'))
+		  MATRIX_KEY(4, 0, T('s'))
+		  MATRIX_KEY(4, 1, T('d'))
+		  MATRIX_KEY(4, 2, T('f'))
+		  MATRIX_KEY(4, 3, T('g'))
+		  MATRIX_KEY(4, 4, T('h'))
+		  MATRIX_KEY(4, 5, T('j'))
+		  MATRIX_KEY(4, 6, T('k'))
+		  MATRIX_KEY(4, 7, T('l'))
+		  MATRIX_KEY(4, 8, T(';'))
+		  MATRIX_KEY(5, 0, T(0x27))          /* ' */
+		  MATRIX_KEY(5, 1, INPUT_KEY_ENTER)
+		  MATRIX_KEY(5, 2, INPUT_KEY_LEFTSHIFT)
+		  MATRIX_KEY(5, 3, T('z'))
+		  MATRIX_KEY(5, 4, T('x'))
+		  MATRIX_KEY(5, 5, T('c'))
+		  MATRIX_KEY(5, 6, T('v'))
+		  MATRIX_KEY(5, 7, T('b'))
+		  MATRIX_KEY(5, 8, T('n'))
+		  MATRIX_KEY(6, 0, T('m'))
+		  MATRIX_KEY(6, 1, T(','))
+		  MATRIX_KEY(6, 2, T('.'))
+		  MATRIX_KEY(6, 3, T('/'))
+		  MATRIX_KEY(6, 4, INPUT_KEY_UP)
+		  MATRIX_KEY(6, 5, INPUT_KEY_RIGHTSHIFT)
+		  MATRIX_KEY(6, 6, INPUT_KEY_LEFTCTRL)
+		  MATRIX_KEY(6, 7, INPUT_KEY_LEFTMETA)
+		  MATRIX_KEY(6, 8, INPUT_KEY_LEFTALT)
+		  MATRIX_KEY(7, 0, T(0x5c))          /* backslash */
+		  MATRIX_KEY(7, 1, T(' '))
+		  MATRIX_KEY(7, 2, T(' '))
+		  MATRIX_KEY(7, 3, T(' '))
+		  MATRIX_KEY(7, 4, INPUT_KEY_RIGHTALT)
+		  MATRIX_KEY(7, 5, INPUT_KEY_LEFT)
+		  MATRIX_KEY(7, 6, INPUT_KEY_DOWN)
+		  MATRIX_KEY(7, 7, INPUT_KEY_RIGHT)>;
+};
+
+#undef T
