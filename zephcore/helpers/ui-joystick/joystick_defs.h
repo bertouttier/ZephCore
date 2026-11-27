@@ -12,7 +12,8 @@
  * The UI's internal codes, one char through JoystickUITask::enqueueKey();
  * not the Zephyr INPUT_KEY_* codes, never persisted or transmitted.
  *   0x01-0x1F  control keys (navigation, enter, cancel)
- *   0x20-0x7E  reserved for printable characters typed on a keyboard
+ *   0x20-0x7E  printable characters typed on a keyboard
+ *   0x7F       keyboard backspace (KEY_BACKSPACE, ASCII DEL)
  *   0xF1-0xFF  long-press and global action keys
  * KEY_ENTER and KEY_CANCEL are ASCII CR and ESC. */
 #define KEY_ENTER       0x0D   /* center/OK button click */
@@ -25,6 +26,7 @@
 #define KEY_PREV        0x06   /* single button prev page */
 #define KEY_HOME        0x07   /* go to home screen */
 #define KEY_SELECT      0x08   /* triple click / special */
+#define KEY_BACKSPACE   0x7F   /* keyboard backspace: deletes in the text screens */
 /* Keys above 0x7F MUST be cast to char here.  They travel through the UI as a
  * plain `char` (enqueueKey / handleInput), and plain char is SIGNED on Xtensa
  * and RISC-V (ESP32-S3, ESP32-C6) while it is UNSIGNED on ARM.  Without the

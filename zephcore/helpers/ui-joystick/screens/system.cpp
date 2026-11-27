@@ -429,6 +429,8 @@ int RenameNodeScreen::render(JoystickDisplay &display)
 
 bool RenameNodeScreen::handleInput(char c)
 {
+	if (handleT9TypedKey(c, _input, _cursor, sizeof(_input), _selected_key,
+			     _last_key, _letter_index, _last_press_time)) return true;
 	if (handleT9DirectionalInput(c, _selected_key)) return true;
 
 	if (c == KEY_ENTER) {

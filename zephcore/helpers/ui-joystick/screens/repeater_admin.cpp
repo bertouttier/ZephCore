@@ -587,6 +587,8 @@ int RepeaterAdminScreen::render(JoystickDisplay &display)
 /* handleInput() in STATE_PASSWORD_ENTRY. */
 bool RepeaterAdminScreen::handlePasswordKey(char c)
 {
+	if (handleT9TypedKey(c, _password, _pwd_len, ADMIN_PASSWORD_MAX, _pwd_t9_sel,
+			     _pwd_t9_last_key, _pwd_t9_letter_index, _pwd_t9_last_press)) return true;
 	if (handleT9DirectionalInput(c, _pwd_t9_sel)) return true;
 	if (c == KEY_ENTER) {
 		if (_pwd_t9_sel == 3) {
@@ -790,6 +792,8 @@ bool RepeaterAdminScreen::handleMainKey(char c)
 /* handleInput() in STATE_CMD_INPUT. */
 bool RepeaterAdminScreen::handleCmdInputKey(char c)
 {
+	if (handleT9TypedKey(c, _cmd_buf, _cmd_len, ADMIN_CMD_MAX, _cmd_t9_sel,
+			     _cmd_t9_last_key, _cmd_t9_letter_index, _cmd_t9_last_press)) return true;
 	if (handleT9DirectionalInput(c, _cmd_t9_sel)) return true;
 	if (c == KEY_ENTER) {
 		if (_cmd_t9_sel == 3) {

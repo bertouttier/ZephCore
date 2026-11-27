@@ -650,6 +650,9 @@ bool ContactsScreen::handleEditPathKey(char key)
 		}
 		return false;
 	}
+	if (handleT9TypedKey(key, _editpath_hexbuf, _editpath_cursor, sizeof(_editpath_hexbuf),
+			     _editpath_t9_sel, _editpath_t9_last_key, _editpath_t9_letter_index,
+			     _editpath_t9_last_press, "0123456789abcdefABCDEF")) return true;
 	if (handleT9DirectionalInput(key, _editpath_t9_sel)) return true;
 	if (key == KEY_ENTER) {
 		if (_editpath_t9_sel == 3) {  /* del */

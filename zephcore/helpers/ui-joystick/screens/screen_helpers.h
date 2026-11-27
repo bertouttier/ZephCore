@@ -518,6 +518,31 @@ static inline bool handleT9DirectionalInput(char c, int &selected_key)
 	return false;
 }
 
+/* A keyboard types into a T9 text screen directly: a printable character
+ * (optionally only those in @p accept) is added at the end, KEY_BACKSPACE
+ * deletes the last one, and the selection moves to the confirm key (11: send,
+ * save, log in, run) so that Enter confirms the text. Returns false for any
+ * other key, which the screen handles as before. */
+static inline bool handleT9TypedKey(char c, char *buf, int &cursor, size_t capacity,
+		int &selected_key, int &last_key, int &letter_index,
+		uint32_t &last_press_time, const char *accept = nullptr)
+{
+	if (c == KEY_BACKSPACE) {
+		if (cursor > 0) buf[--cursor] = '\0';
+	} else if (c >= 0x20 && c <= 0x7E) {
+		if (accept && !strchr(accept, c)) return true;  /* typed, but not for this field */
+		if (cursor < (int)capacity - 1) {
+			buf[cursor++] = c;
+			buf[cursor] = '\0';
+		}
+	} else {
+		return false;
+	}
+	resetT9State(last_key, letter_index, last_press_time);
+	selected_key = 11;
+	return true;
+}
+
 static inline void renderT9Keypad(JoystickDisplay &display, const char * const *labels,
 		int selected_key, int y_start, int key_height = 10)
 {

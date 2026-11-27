@@ -468,6 +468,7 @@ static void joystick_ui_input_cb(struct input_event *evt, void *user_data)
 	case INPUT_KEY_RIGHT:   key = KEY_RIGHT;        break;
 	case INPUT_KEY_BACK:
 	case INPUT_KEY_ESC:     key = KEY_CANCEL;       break;
+	case INPUT_KEY_BACKSPACE: key = KEY_BACKSPACE;  break;
 	case INPUT_KEY_1:       key = KEY_CANCEL;       break;
 	/* Keypad boards (ThinkNode M9) — the only input those have */
 	case INPUT_KEY_HOME:    key = KEY_HOME;         break;
