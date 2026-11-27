@@ -722,6 +722,18 @@ devdocs/audit/01-sx126x.md and LLD 03.
   * sx126x_lora_airtime() uses the SF5/SF6 packet format (6.25 sync symbols,
     no +8 in the payload numerator) at those spreading factors.
 
+== Wait for BUSY to rise before polling it ==
+
+sx126x_hal_wait_busy() sampled the BUSY pin at once, but the chip raises BUSY
+up to 600 ns after NSS goes high at the end of a command (SX1261/2 datasheet,
+T_SW).  On a fast host with a GPIO chip select the poll lands inside that
+window, reads "ready" and sends the next command while the chip is still taking
+the previous one.  On the Fri3d Camp 2026 badge (ESP32-S3 at 240 MHz, CS on a
+GPIO, TCXO on DIO3) the RX-gain write right after SetRx(continuous) was lost
+that way: the chip counted the packets it received (GetStats) but RX_DONE never
+reached the radio adapter, so the node was deaf.  A 1 us busy-wait before the
+first sample covers T_SW on every SX126x.
+
 == Why this is one patch ==
 
 Five of the sections above shipped as separate files (0011 band-rssi-cal, 0012
@@ -764,7 +776,7 @@ Regenerate with:
 appended to this preamble.
 
 diff --git a/drivers/lora/native/sx126x/sx126x.c b/drivers/lora/native/sx126x/sx126x.c
-index c23685301a5..154ba7f85fe 100644
+index c23685301a5..a2d79c4c001 100644
 --- a/drivers/lora/native/sx126x/sx126x.c
 +++ b/drivers/lora/native/sx126x/sx126x.c
 @@ -6,15 +6,54 @@
@@ -1329,7 +1341,7 @@ index c23685301a5..154ba7f85fe 100644
  	if (ret < 0) {
  		LOG_ERR("Set IRQ params failed: %d", ret);
  		return ret;
-@@ -597,21 +984,12 @@ static int sx126x_chip_init(const struct device *dev)
+@@ -597,19 +984,10 @@ static int sx126x_chip_init(const struct device *dev)
  		return ret;
  	}
  
@@ -1344,19 +1356,14 @@ index c23685301a5..154ba7f85fe 100644
 -	}
 -
 -	ret = sx126x_add_reg_to_retention(dev, SX126X_REG_TX_MODULATION);
--	if (ret < 0) {
--		LOG_ERR("Add TX_MODULATION to retention failed: %d", ret);
--		return ret;
--	}
 +	/* Install the warm-start retention list once, here, rather than on
 +	 * every duty-cycle re-arm. */
 +	ret = sx126x_install_retention_list(dev);
-+	if (ret < 0) {
-+		return ret;
-+	}
+ 	if (ret < 0) {
+-		LOG_ERR("Add TX_MODULATION to retention failed: %d", ret);
+ 		return ret;
+ 	}
  
- 	LOG_INF("SX126x initialized");
- 	return 0;
 @@ -621,15 +999,44 @@ static void sx126x_dio1_callback(const struct device *dev)
  {
  	struct sx126x_data *data = dev->data;
@@ -1690,15 +1697,15 @@ index c23685301a5..154ba7f85fe 100644
 -		sx126x_set_rx(dev, 0);
 +	if (SX126X_IS_GFSK(data) || data->config.packet_crc_disable) {
 +		return true;
-+	}
+ 	}
 +	if (sx126x_hal_read_regs(dev, SX126X_REG_LORA_RX_HEADER_CRC, &reg, 1) < 0) {
 +		return true;
- 	}
++	}
 +	return (reg & SX126X_LORA_RX_HEADER_CRC_ON) != 0;
  }
  
  static void sx126x_handle_irq_rx_done(const struct device *dev, uint16_t irq_status)
-@@ -777,80 +1411,227 @@ static void sx126x_handle_irq_rx_done(const struct device *dev, uint16_t irq_sta
+@@ -777,68 +1411,215 @@ static void sx126x_handle_irq_rx_done(const struct device *dev, uint16_t irq_sta
  	struct sx126x_data *data = dev->data;
  	struct sx126x_rx_result result = { 0 };
  	uint8_t payload_len = 0, offset = 0;
@@ -1763,23 +1770,15 @@ index c23685301a5..154ba7f85fe 100644
  	}
  
 -	sx126x_get_packet_status(dev, &result.rssi, &result.snr);
--
--	if (irq_status & SX126X_IRQ_CRC_ERR) {
--		LOG_WRN("CRC error");
--		result.status = -EIO;
--		goto out;
--	}
 +	k_mutex_lock(&data->lock, K_FOREVER);
 +	rx_cb = data->rx_cb;
 +	rx_cb_user_data = data->rx_cb_user_data;
 +	rx_cb_gen = atomic_get(&data->rx_cb_gen);
 +	k_mutex_unlock(&data->lock);
  
--	result.len = MIN(payload_len, sizeof(data->rx_buf));
--	ret = sx126x_hal_read_buffer(dev, offset, data->rx_buf, result.len);
--	if (ret < 0) {
--		LOG_ERR("Failed to read RX buffer");
--		result.status = ret;
+-	if (irq_status & SX126X_IRQ_CRC_ERR) {
+-		LOG_WRN("CRC error");
+-		result.status = -EIO;
 -		goto out;
 -	}
 +	/* Handle async callback or signal sync receiver */
@@ -1798,9 +1797,13 @@ index c23685301a5..154ba7f85fe 100644
 +		}
 +		sx126x_restart_rx(dev, data);
  
--	result.status = result.len;
--	LOG_DBG("RX done: %d bytes, RSSI=%d, SNR=%d",
--		result.len, result.rssi, result.snr);
+-	result.len = MIN(payload_len, sizeof(data->rx_buf));
+-	ret = sx126x_hal_read_buffer(dev, offset, data->rx_buf, result.len);
+-	if (ret < 0) {
+-		LOG_ERR("Failed to read RX buffer");
+-		result.status = ret;
+-		goto out;
+-	}
 +		k_mutex_lock(&data->lock, K_FOREVER);
 +		if ((data->rx_cb != rx_cb) ||
 +		    (atomic_get(&data->rx_cb_gen) != rx_cb_gen)) {
@@ -1808,6 +1811,10 @@ index c23685301a5..154ba7f85fe 100644
 +		}
 +		k_mutex_unlock(&data->lock);
  
+-	result.status = result.len;
+-	LOG_DBG("RX done: %d bytes, RSSI=%d, SNR=%d",
+-		result.len, result.rssi, result.snr);
+-
 -out:
 -	if (data->rx_cb == NULL) {
 +		if (rx_cb != NULL && result.status < 0) {
@@ -1877,16 +1884,13 @@ index c23685301a5..154ba7f85fe 100644
 +	sx126x_reset_rx_busy_signals(data);
 +
 +	if (data->cad_active) {
- 		return;
- 	}
- 
--	sx126x_set_sleep(dev);
++		return;
++	}
++
 +	k_mutex_lock(&data->lock, K_FOREVER);
 +	rx_cb = data->rx_cb;
 +	k_mutex_unlock(&data->lock);
- 
--	if (data->tx_async_signal != NULL) {
--		struct sx126x_tx_result result = { .status = -ETIMEDOUT };
++
 +	/* Duty-cycle RX: a preamble false-positive (noise, partial preamble
 +	 * from another modulation) can fire RxTimeout -- but the chip has left
 +	 * duty cycle and is parked in STDBY_RC.  Without this re-arm the
@@ -1910,11 +1914,7 @@ index c23685301a5..154ba7f85fe 100644
 +	if (data->rx_duty_cycle_enabled && rx_cb != NULL &&
 +	    atomic_get(&data->state) != SX126X_STATE_TX) {
 +		int ret;
- 
--		k_poll_signal_raise(data->tx_async_signal, -ETIMEDOUT);
--		data->tx_async_signal = NULL;
--		k_msgq_put(&data->tx_msgq, &result, K_NO_WAIT);
--	} else if (data->rx_cb == NULL) {
++
 +		/* Not when this timeout is the CAD_RX probe's own cadTimeout:
 +		 * that is a calibration false positive, it raises the identical
 +		 * IRQ, and counting it would mix one tick per busy probe into a
@@ -1957,20 +1957,8 @@ index c23685301a5..154ba7f85fe 100644
 +			LOG_WRN("Non-DC timeout re-arm failed (%d)", ret);
 +			(void)sx126x_set_sleep(dev);
 +		}
-+		return;
-+	}
-+
-+	sx126x_set_sleep(dev);
-+
-+	if (data->tx_async_signal != NULL) {
-+		struct sx126x_tx_result result = { .status = -ETIMEDOUT };
-+
-+		k_poll_signal_raise(data->tx_async_signal, -ETIMEDOUT);
-+		data->tx_async_signal = NULL;
-+		k_msgq_put(&data->tx_msgq, &result, K_NO_WAIT);
-+	} else if (data->rx_cb == NULL) {
- 		/* Sync RX timeout */
- 		struct sx126x_rx_result result = { .status = -EAGAIN };
+ 		return;
+ 	}
  
 @@ -870,6 +1651,7 @@ static void sx126x_irq_work_handler(struct k_work *work)
  		LOG_ERR("Failed to get IRQ status");
@@ -4090,13 +4078,18 @@ index 93239087373..3388db4e8e8 100644
  	uint8_t dio3_tcxo_voltage;
  	bool dio2_tx_enable;
 diff --git a/drivers/lora/native/sx126x/sx126x_hal_common.c b/drivers/lora/native/sx126x/sx126x_hal_common.c
-index 19c71594193..5f7eece3930 100644
+index 19c71594193..ae561ad3922 100644
 --- a/drivers/lora/native/sx126x/sx126x_hal_common.c
 +++ b/drivers/lora/native/sx126x/sx126x_hal_common.c
-@@ -41,11 +41,29 @@ static int spi_transfer(const struct spi_dt_spec *spi,
+@@ -41,11 +41,34 @@ static int spi_transfer(const struct spi_dt_spec *spi,
  
  int sx126x_hal_wait_busy(const struct device *dev, uint32_t timeout_ms)
  {
++	/* BUSY rises up to 600 ns after NSS goes high at the end of a command
++	 * (SX1261/2 datasheet, T_SW): polling at once can see it still low and
++	 * send the next command while the chip is busy with this one. */
++	k_busy_wait(1);
++
 +	/* Fast path: most SX126x commands finish BUSY in <650 us.
 +	 * Busy-wait first to avoid the ~1 ms k_msleep() scheduler
 +	 * penalty, which would otherwise dominate RX turnaround. */
