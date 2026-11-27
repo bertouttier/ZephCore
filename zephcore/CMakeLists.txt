@@ -77,15 +77,23 @@ endforeach()
 set(ZEPHCORE_USER_CONFS "${ZEPHCORE_USER_EXTRA_CONF_FILE}")
 
 # Under sysbuild the user's EXTRA_CONF_FILE goes to sysbuild, not the app, and
-# BOARD is not set yet: recover both from the sysbuild cache.
-if(NOT BOARD AND DEFINED SYSBUILD_CACHE AND EXISTS "${SYSBUILD_CACHE}")
+# BOARD is not set yet on the first configure: recover both from the sysbuild
+# cache. The confs on every configure, not only the first: a reconfigure
+# (a changed conf, west flash after an edit) has BOARD in the app's cache and
+# would otherwise drop them, giving a different firmware (or failing the role
+# check below) without --pristine.
+if(DEFINED SYSBUILD_CACHE AND EXISTS "${SYSBUILD_CACHE}")
     file(STRINGS "${SYSBUILD_CACHE}" _sysbuild_strings ENCODING UTF-8)
     foreach(_str ${_sysbuild_strings})
-        if(_str MATCHES "^BOARD:STRING=(.+)")
+        if(NOT BOARD AND _str MATCHES "^BOARD:STRING=(.+)")
             set(BOARD "${CMAKE_MATCH_1}")
         endif()
         if(_str MATCHES "^EXTRA_CONF_FILE:UNINITIALIZED=(.+)")
-            list(APPEND ZEPHCORE_USER_CONFS "${CMAKE_MATCH_1}")
+            foreach(_c IN LISTS CMAKE_MATCH_1)
+                if(NOT "${_c}" IN_LIST ZEPHCORE_USER_CONFS)
+                    list(APPEND ZEPHCORE_USER_CONFS "${_c}")
+                endif()
+            endforeach()
         endif()
     endforeach()
     message(STATUS "Sysbuild: BOARD=${BOARD} user confs=${ZEPHCORE_USER_CONFS}")
