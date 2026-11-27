@@ -83,22 +83,34 @@ static const struct pwm_dt_spec s_heartbeat_led_pwm =
 	PWM_DT_SPEC_GET(DT_ALIAS(heartbeat_pwm_led));
 #define HAS_HEARTBEAT_LED_PWM 1
 #define HAS_HEARTBEAT_LED 0
+#define HAS_HEARTBEAT_LED_API 0
 #elif DT_NODE_HAS_PROP(DT_ALIAS(led0), gpios)
 static const struct gpio_dt_spec s_heartbeat_led =
 	GPIO_DT_SPEC_GET(DT_ALIAS(led0), gpios);
 #define HAS_HEARTBEAT_LED_PWM 0
 #define HAS_HEARTBEAT_LED 1
+#define HAS_HEARTBEAT_LED_API 0
 #elif DT_NODE_HAS_PROP(DT_ALIAS(led1), gpios)
 static const struct gpio_dt_spec s_heartbeat_led =
 	GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
 #define HAS_HEARTBEAT_LED_PWM 0
 #define HAS_HEARTBEAT_LED 1
+#define HAS_HEARTBEAT_LED_API 0
+#elif DT_NODE_EXISTS(DT_ALIAS(led0))
+/* led0 on an LED controller (a child node of an LED API device, e.g. an I/O
+ * expander's PWM outputs): driven through the LED API. */
+#include <zephyr/drivers/led.h>
+static const struct led_dt_spec s_heartbeat_led_api = LED_DT_SPEC_GET(DT_ALIAS(led0));
+#define HAS_HEARTBEAT_LED_PWM 0
+#define HAS_HEARTBEAT_LED 0
+#define HAS_HEARTBEAT_LED_API 1
 #else
 #define HAS_HEARTBEAT_LED_PWM 0
 #define HAS_HEARTBEAT_LED 0
+#define HAS_HEARTBEAT_LED_API 0
 #endif
 
-#define HAS_ANY_HEARTBEAT_LED (HAS_HEARTBEAT_LED_PWM || HAS_HEARTBEAT_LED)
+#define HAS_ANY_HEARTBEAT_LED (HAS_HEARTBEAT_LED_PWM || HAS_HEARTBEAT_LED || HAS_HEARTBEAT_LED_API)
 
 #if HAS_HEARTBEAT_LED_PWM
 static inline bool heartbeat_led_is_ready(void)
@@ -118,6 +130,19 @@ static inline void heartbeat_led_write(bool on)
 {
 	gpio_pin_set_dt(&s_heartbeat_led, on ? 1 : 0);
 }
+#elif HAS_HEARTBEAT_LED_API
+static inline bool heartbeat_led_is_ready(void)
+{
+	return led_is_ready_dt(&s_heartbeat_led_api);
+}
+static inline void heartbeat_led_write(bool on)
+{
+	if (on) {
+		led_on_dt(&s_heartbeat_led_api);
+	} else {
+		led_off_dt(&s_heartbeat_led_api);
+	}
+}
 #endif
 
 /* Second LED for unread-message indication. Repeaters use led1 for LoRa TX
@@ -127,6 +152,33 @@ static inline void heartbeat_led_write(bool on)
 static const struct gpio_dt_spec s_msg_led =
 	GPIO_DT_SPEC_GET(DT_ALIAS(led1), gpios);
 #define HAS_MSG_LED 1
+static inline bool msg_led_is_ready(void)
+{
+	return gpio_is_ready_dt(&s_msg_led) &&
+	       gpio_pin_configure_dt(&s_msg_led, GPIO_OUTPUT_INACTIVE) == 0;
+}
+static inline void msg_led_write(bool on)
+{
+	gpio_pin_set_dt(&s_msg_led, on ? 1 : 0);
+}
+#elif HAS_ANY_HEARTBEAT_LED && DT_NODE_EXISTS(DT_ALIAS(led1)) && \
+	!DT_NODE_HAS_PROP(DT_ALIAS(led1), gpios) && !defined(ZEPHCORE_REPEATER)
+/* led1 on an LED controller (e.g. a pixel of an LED strip): the LED API */
+#include <zephyr/drivers/led.h>
+static const struct led_dt_spec s_msg_led_api = LED_DT_SPEC_GET(DT_ALIAS(led1));
+#define HAS_MSG_LED 1
+static inline bool msg_led_is_ready(void)
+{
+	return led_is_ready_dt(&s_msg_led_api);
+}
+static inline void msg_led_write(bool on)
+{
+	if (on) {
+		led_on_dt(&s_msg_led_api);
+	} else {
+		led_off_dt(&s_msg_led_api);
+	}
+}
 #else
 #define HAS_MSG_LED 0
 #endif
@@ -136,13 +188,19 @@ static const struct gpio_dt_spec s_msg_led =
 #define LED_ON_MSG_MS    200   /* Pulse width when unread messages */
 
 #if HAS_ANY_HEARTBEAT_LED
-static struct k_work_delayable s_led_on_work;
-static struct k_work_delayable s_led_off_work;
+/* Defined (initialized) statically, not in ui_led_heartbeat_init(): the gate
+ * (zephcore_leds_ui_sync), ui_set_heartbeat_led() and ui_led_flash_msg() can
+ * schedule them in roles or orders that never ran the init (the observer did,
+ * and the work queue jumped to a NULL handler). */
+static void led_on_work_handler(struct k_work *work);
+static void led_off_work_handler(struct k_work *work);
+static K_WORK_DELAYABLE_DEFINE(s_led_on_work, led_on_work_handler);
+static K_WORK_DELAYABLE_DEFINE(s_led_off_work, led_off_work_handler);
 
 /*
  * Weak: returns current unread message count for pulse-width adaptation.
- * Overridden by ui_task.c (button UI) to read from ui_state.
- * Joystick UI leaves this at 0 — it drives its own message display.
+ * Overridden by ui_task.c (button UI) to read from ui_state and by
+ * joystick_ui_hooks.cpp (joystick UI) with its unread count.
  */
 __attribute__((weak)) uint16_t ui_led_get_msg_count(void) { return 0; }
 
@@ -182,7 +240,7 @@ static void led_off_work_handler(struct k_work *work)
 		heartbeat_led_write(false);
 	}
 #if HAS_MSG_LED
-	gpio_pin_set_dt(&s_msg_led, 0);
+	msg_led_write(false);
 #endif
 	uint16_t on_ms = hb_pulse_ms(ui_led_get_msg_count());
 
@@ -205,7 +263,7 @@ static void led_on_work_handler(struct k_work *work)
 		 * the liveness-only mode and deliberately suppresses it. */
 		if (mc > 0 && zephcore_leds_hb_mode() != LEDS_HB_OFF &&
 		    zephcore_leds_hb_mode() != LEDS_HB_HB) {
-			gpio_pin_set_dt(&s_msg_led, 1);
+			msg_led_write(true);
 		}
 #endif
 	}
@@ -229,14 +287,11 @@ void ui_led_heartbeat_init(void)
 #else
 		heartbeat_led_write(false);
 #endif
-		k_work_init_delayable(&s_led_on_work, led_on_work_handler);
-		k_work_init_delayable(&s_led_off_work, led_off_work_handler);
 		k_work_reschedule(&s_led_on_work, K_NO_WAIT);
 		LOG_INF("LED heartbeat started");
 	}
 #if HAS_MSG_LED
-	if (gpio_is_ready_dt(&s_msg_led)) {
-		gpio_pin_configure_dt(&s_msg_led, GPIO_OUTPUT_INACTIVE);
+	if (msg_led_is_ready()) {
 		LOG_INF("msg LED ready");
 	}
 #endif
@@ -255,7 +310,7 @@ void ui_set_heartbeat_led(bool enabled)
 		k_work_cancel_delayable(&s_led_off_work);
 		heartbeat_led_write(false);
 #if HAS_MSG_LED
-		gpio_pin_set_dt(&s_msg_led, 0);
+		msg_led_write(false);
 #endif
 	}
 #else
@@ -277,7 +332,7 @@ void zephcore_leds_ui_sync(bool disabled)
 		k_work_cancel_delayable(&s_led_off_work);
 		heartbeat_led_write(false);
 #if HAS_MSG_LED
-		gpio_pin_set_dt(&s_msg_led, 0);
+		msg_led_write(false);
 #endif
 	} else if (!k_work_delayable_is_pending(&s_led_on_work) &&
 		   !k_work_delayable_is_pending(&s_led_off_work)) {

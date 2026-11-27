@@ -64,14 +64,24 @@ static const struct pwm_dt_spec tx_led_pwm = PWM_DT_SPEC_GET(DT_ALIAS(lora_tx_pw
 #define HAS_TX_LED_PWM 1
 #define HAS_TX_LED 0
 /* Initialised in tx_led_init() below, with the GPIO path. */
-#elif DT_NODE_EXISTS(DT_ALIAS(lora_tx_led))
+#define HAS_TX_LED_API 0
+#elif DT_NODE_HAS_PROP(DT_ALIAS(lora_tx_led), gpios)
 static const struct gpio_dt_spec tx_led =
 	GPIO_DT_SPEC_GET(DT_ALIAS(lora_tx_led), gpios);
 #define HAS_TX_LED_PWM 0
 #define HAS_TX_LED 1
+#define HAS_TX_LED_API 0
+#elif DT_NODE_EXISTS(DT_ALIAS(lora_tx_led))
+/* An LED of an LED controller (e.g. a pixel of an LED strip): the LED API */
+#include <zephyr/drivers/led.h>
+static const struct led_dt_spec tx_led_api = LED_DT_SPEC_GET(DT_ALIAS(lora_tx_led));
+#define HAS_TX_LED_PWM 0
+#define HAS_TX_LED 1
+#define HAS_TX_LED_API 1
 #else
 #define HAS_TX_LED_PWM 0
 #define HAS_TX_LED 0
+#define HAS_TX_LED_API 0
 #endif
 
 /* Heartbeat and activity LED on one pin: only then is the arbitration hold in
@@ -95,6 +105,27 @@ static const struct gpio_dt_spec tx_led =
 static inline void tx_led_write(bool on)
 {
 	zephcore_led_pwm_write(&tx_led_pwm, on);
+}
+#elif HAS_TX_LED_API
+/* The LED API may sleep (an LED strip on SPI) and the receive blink comes from
+ * the radio's interrupt path: set the LED from the system work queue. */
+static atomic_t tx_led_api_on;
+static struct k_work tx_led_api_work;
+
+static void tx_led_api_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+	if (atomic_get(&tx_led_api_on)) {
+		led_on_dt(&tx_led_api);
+	} else {
+		led_off_dt(&tx_led_api);
+	}
+}
+
+static inline void tx_led_write(bool on)
+{
+	atomic_set(&tx_led_api_on, on ? 1 : 0);
+	k_work_submit(&tx_led_api_work);
 }
 #elif HAS_TX_LED
 static inline void tx_led_write(bool on)
@@ -202,6 +233,9 @@ static int tx_led_init(void)
 	if (device_is_ready(tx_led_pwm.dev)) {
 		pwm_set_pulse_dt(&tx_led_pwm, 0);  /* start dark, same as GPIO_OUTPUT_INACTIVE */
 	}
+#elif HAS_TX_LED_API
+	/* the LED controller starts dark */
+	k_work_init(&tx_led_api_work, tx_led_api_work_handler);
 #else
 	if (gpio_is_ready_dt(&tx_led)) {
 		gpio_pin_configure_dt(&tx_led, GPIO_OUTPUT_INACTIVE);

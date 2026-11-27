@@ -91,7 +91,7 @@ static const NodePrefs* cliDefaults() {
  */
 #define CLI_HAS_RADIO_LED  (DT_NODE_EXISTS(DT_ALIAS(lora_tx_led)) || \
 			     DT_NODE_EXISTS(DT_ALIAS(lora_tx_pwm_led)))
-#define CLI_HAS_HB_LED     (DT_NODE_HAS_PROP(DT_ALIAS(led0), gpios) || \
+#define CLI_HAS_HB_LED     (DT_NODE_EXISTS(DT_ALIAS(led0)) || \
 			    DT_NODE_HAS_PROP(DT_ALIAS(led1), gpios))
 
 struct CliModeName { const char* name; uint8_t val; };

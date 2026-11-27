@@ -64,6 +64,14 @@ extern "C" void joystick_ui_hooks_register(
 	JoystickUITask::setScheduleRenderFn(joystick_schedule_render);
 }
 
+/* Unread messages for the heartbeat pulse and the unread LED (ui_common.c) */
+extern "C" uint16_t ui_led_get_msg_count(void)
+{
+	int unread = s_task ? s_task->getUnreadCount() : 0;
+
+	return unread > 0 ? (uint16_t)MIN(unread, UINT16_MAX) : 0;
+}
+
 extern "C" void ui_signal_refresh(void)
 {
 	if (s_signal_refresh) {
